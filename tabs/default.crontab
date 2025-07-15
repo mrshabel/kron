@@ -1,0 +1,40 @@
+# say hello every minute
+* * * * * echo "Hello! Kron is active"
+
+# say the time every 2 minutes
+*/2 * * * * echo "Kron says the current time is: $(date)"
+
+# log uptime every 5 minutes
+*/5 * * * * echo "Kron System uptime: $(uptime)"
+
+# greet the current user every hour
+0 * * * * echo "Hiiii, $(whoami)!"
+
+# confirm it's still running daily at midnight
+0 0 * * * echo "It's midnight and Kron is still running."
+
+# NEW INSTANT TASKS FOR TESTING:
+
+# show working directory every 30 seconds
+*/30 * * * * echo "Kron working directory: $(pwd)"
+
+# display hostname every 45 seconds
+*/45 * * * * echo "Kron running on hostname: $(hostname)"
+
+# show process ID every minute (offset by 30 seconds from hello)
+30 * * * * echo "Kron PID info: $$"
+
+# list running processes count every 90 seconds
+*/90 * * * * echo "Kron sees $(ps aux | wc -l) processes running"
+
+# show memory usage every 3 minutes
+*/3 * * * * echo "Kron memory check: $(free -h | grep '^Mem:' | awk '{print $3 "/" $2}')"
+
+# display load average every 4 minutes
+*/4 * * * * echo "Kron load average: $(uptime | awk -F'load average:' '{print $2}')"
+
+# show disk usage of root every 6 minutes
+*/6 * * * * echo "Kron disk usage: $(df -h / | tail -1 | awk '{print $5 " used"}')"
+
+# count files in current directory every 7 minutes
+*/7 * * * * echo "Kron file count: $(ls -1 | wc -l) files in $(pwd)"
