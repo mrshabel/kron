@@ -2,6 +2,8 @@
 package core
 
 import (
+	"os"
+
 	"github.com/confluentinc/confluent-kafka-go/kafka"
 )
 
@@ -14,7 +16,7 @@ const (
 )
 
 var cfg = &Config{
-	Brokers: "localhost:9092",
+	Brokers: getEnv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"),
 }
 
 // NewProducer creates a new instance of a kafka producer
@@ -49,4 +51,12 @@ func NewConsumer(topics []string, groupID string) (*kafka.Consumer, error) {
 		return nil, err
 	}
 	return consumer, nil
+}
+
+func getEnv(key string, fallback string) string {
+	val := os.Getenv(key)
+	if val != "" {
+		return val
+	}
+	return fallback
 }

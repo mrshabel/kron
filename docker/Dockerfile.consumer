@@ -15,7 +15,7 @@ RUN go mod download
 COPY . .
 
 # build app
-RUN go build -tags musl -ldflags '-extldflags "-static"' -o main cmd/producer/main.go
+RUN go build -tags musl -ldflags '-extldflags "-static"' -o main cmd/consumer/main.go
 
 
 # run binary in minimal docker image
@@ -26,6 +26,5 @@ WORKDIR /app
 
 # copy binary from builder stage
 COPY --from=builder /app/main /app/main
-COPY --from=builder /app/tabs /app/tabs
 
 CMD ["./main"]

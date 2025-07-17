@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	DefaultCronPollInterval      = 10 * time.Second
+	DefaultCronPollInterval      = 1 * time.Minute
 	DefaultCrontabPath           = "./tabs/default.crontab"
 	DefaultBrokerDeliveryTimeout = 30 * time.Second
 
@@ -89,7 +89,14 @@ func NewKronProducer(cfg *ProducerConfig) (*Producer, error) {
 		return nil, err
 	}
 
-	producer := &Producer{producer: p, Topic: cfg.Topic, deliveryChan: make(chan kafka.Event, 1000), logger: cfg.logger, scheduledJobs: make(map[string]time.Time), cronParser: cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow)}
+	producer := &Producer{
+		producer:      p,
+		Topic:         cfg.Topic,
+		deliveryChan:  make(chan kafka.Event, 1000),
+		logger:        cfg.logger,
+		scheduledJobs: make(map[string]time.Time),
+		cronParser:    cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow),
+	}
 	producer.config = cfg
 
 	return producer, nil

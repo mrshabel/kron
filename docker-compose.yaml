@@ -3,17 +3,37 @@
 # project name
 name: kron
 services:
-    # producer:
-    #     build:
-    #         context: .
-    #         dockerfile: ./docker/Dockerfile.producer
-    #     container_name: kron-producer
-    #     depends_on:
-    #         - kafka
-    #     volumes:
-    #         - ./tabs:/app/tabs
-    #     networks:
-    #         - kron
+    producer:
+        build:
+            context: .
+            dockerfile: ./docker/Dockerfile.producer
+        container_name: kron-producer
+        depends_on:
+            kafka:
+                condition: service_healthy
+        volumes:
+            - ./tabs:/app/tabs
+        environment:
+            # comma-separated kafka server addresses
+            - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+        networks:
+            - kron
+
+    consumer:
+        build:
+            context: .
+            dockerfile: ./docker/Dockerfile.consumer
+        # container_name: kron-consumer
+        depends_on:
+            kafka:
+                condition: service_healthy
+        # two instances
+        scale: 2
+        environment:
+            # comma-separated kafka server addresses
+            - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+        networks:
+            - kron
 
     kafka:
         image: bitnami/kafka
@@ -31,9 +51,16 @@ services:
             - KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=0@kafka:9093
             # use "CONTROLLER" listener name for quorum activities
             - KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER
-            - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://localhost:9092
+            - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092
         ports:
             - 9092:9092
+        healthcheck:
+            test: kafka-topics.sh --list --bootstrap-server localhost:9092 || exit 1
+            interval: 1s
+            timeout: 60s
+            retries: 60
+        volumes:
+            - ./.kafka-data:/bitnami/kafka
         networks:
             - kron
 
