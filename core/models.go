@@ -16,9 +16,11 @@ type Job struct {
 	Command string `json:"command"`
 	// metadata
 	Meta any `json:"meta"`
+	// cluster for running job
+	Cluster string `json:"cluster"`
 }
 
 // NewJob creates a new scheduled job to run
-func NewJob(command string, scheduledAt time.Time, meta any) *Job {
-	return &Job{ID: uuid.New().String(), ScheduledAt: scheduledAt, Command: command, Meta: meta}
+func NewJob(command string, scheduledAt time.Time, meta any, cluster string) *Job {
+	return &Job{ID: uuid.New().String(), ScheduledAt: scheduledAt, Command: command, Meta: meta, Cluster: cluster}
 }

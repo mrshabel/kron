@@ -19,7 +19,7 @@ const (
 )
 
 type ConsumerConfig struct {
-	Topics                  []string
+	Topic                   string
 	GroupID                 string
 	Logger                  *slog.Logger
 	BrokerPollIntervalMs    int
@@ -28,8 +28,8 @@ type ConsumerConfig struct {
 }
 
 func (cfg *ConsumerConfig) validate() error {
-	if len(cfg.Topics) == 0 {
-		return fmt.Errorf("topic(s) is required")
+	if cfg.Topic == "" {
+		return fmt.Errorf("topic is required")
 	}
 	if cfg.GroupID == "" {
 		return fmt.Errorf("consumer group ID is required")
@@ -58,7 +58,8 @@ func (cfg *ConsumerConfig) validate() error {
 
 type Consumer struct {
 	config   *ConsumerConfig
-	Topics   []string
+	Cluster  string
+	Topic    string
 	GroupID  string
 	consumer *kafka.Consumer
 	logger   *slog.Logger
@@ -71,20 +72,21 @@ func NewKronConsumer(cfg *ConsumerConfig) (*Consumer, error) {
 		return nil, err
 	}
 
-	consumer, err := NewConsumer(cfg.Topics, cfg.GroupID)
+	consumer, err := NewConsumer(cfg.Topic, cfg.GroupID)
 	if err != nil {
 		return nil, err
 	}
 
 	// subscribe to topics
-	if err = consumer.SubscribeTopics(cfg.Topics, nil); err != nil {
+	if err = consumer.Subscribe(cfg.Topic, nil); err != nil {
 		return nil, err
 	}
 
 	return &Consumer{
 		consumer: consumer,
 		config:   cfg,
-		Topics:   cfg.Topics,
+		Cluster:  config.Cluster,
+		Topic:    cfg.Topic,
 		GroupID:  cfg.GroupID,
 		logger:   cfg.Logger,
 	}, nil
@@ -92,7 +94,7 @@ func NewKronConsumer(cfg *ConsumerConfig) (*Consumer, error) {
 
 // Start runs the kron consumer and processes the tasks retrieved
 func (c *Consumer) Start(ctx context.Context) error {
-	c.logger.Info("Kron consumer started. Waiting for messages...")
+	c.logger.Info("Kron consumer started. Waiting for messages...", "cluster", c.Cluster)
 	for {
 		ev := c.consumer.Poll(c.config.BrokerPollIntervalMs)
 		switch e := ev.(type) {
@@ -106,15 +108,15 @@ func (c *Consumer) Start(ctx context.Context) error {
 
 			// process on callback
 			if err := c.RunJob(&job); err != nil {
-				c.logger.Error("failed to process consumed job", "job_id", job.ID, "command", job.Command, "error", err)
+				c.logger.Error("failed to process consumed job", "jobId", job.ID, "command", job.Command, "error", err)
 				// TODO: retry job with backoff then push to retry topic
 				continue
 			}
-			c.logger.Info("Job execution complete", "job_id", job.ID, "scheduled_at", job.ScheduledAt, "completed_at", time.Now().String())
+			c.logger.Info("Job execution complete", "jobId", job.ID, "scheduledAt", job.ScheduledAt, "completedAt", time.Now().String())
 
 			// commit
 			if _, err := c.consumer.CommitMessage(e); err != nil {
-				c.logger.Error("Failed to commit message offset", "job_id", job.ID, "partition", e.TopicPartition.Partition, "offset", e.TopicPartition.Offset)
+				c.logger.Error("Failed to commit message offset", "jobId", job.ID, "partition", e.TopicPartition.Partition, "offset", e.TopicPartition.Offset)
 			}
 		case kafka.Error:
 			if e.IsFatal() || !e.IsRetriable() {
@@ -141,7 +143,7 @@ func (c *Consumer) RunJob(job *Job) error {
 		return err
 	}
 	if output != nil {
-		c.logger.Info("Job executed with output", "job_id", job.ID, "command", job.Command, "output", string(output))
+		c.logger.Info("Job executed with output", "jobId", job.ID, "command", job.Command, "output", string(output))
 	}
 	return nil
 }

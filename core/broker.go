@@ -2,28 +2,20 @@
 package core
 
 import (
-	"os"
+	"fmt"
 
 	"github.com/confluentinc/confluent-kafka-go/kafka"
 )
-
-type Config struct {
-	Brokers string
-}
 
 const (
 	ClientID = "kron-service"
 )
 
-var cfg = &Config{
-	Brokers: getEnv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"),
-}
-
 // NewProducer creates a new instance of a kafka producer
 func NewProducer() (*kafka.Producer, error) {
 	producer, err := kafka.NewProducer(
 		&kafka.ConfigMap{
-			"bootstrap.servers": cfg.Brokers,
+			"bootstrap.servers": config.Brokers,
 			"client.id":         ClientID,
 			"acks":              "all",
 		},
@@ -36,10 +28,10 @@ func NewProducer() (*kafka.Producer, error) {
 }
 
 // NewConsumer creates a new instance of the kafka consumer. It is the caller's responsibility to close the consumer on shutdown
-func NewConsumer(topics []string, groupID string) (*kafka.Consumer, error) {
+func NewConsumer(topic string, groupID string) (*kafka.Consumer, error) {
 	consumer, err := kafka.NewConsumer(
 		&kafka.ConfigMap{
-			"bootstrap.servers": cfg.Brokers,
+			"bootstrap.servers": config.Brokers,
 			"group.id":          groupID,
 			"auto.offset.reset": "smallest",
 		},
@@ -47,16 +39,13 @@ func NewConsumer(topics []string, groupID string) (*kafka.Consumer, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err = consumer.SubscribeTopics(topics, nil); err != nil {
+	if err = consumer.Subscribe(topic, nil); err != nil {
 		return nil, err
 	}
 	return consumer, nil
 }
 
-func getEnv(key string, fallback string) string {
-	val := os.Getenv(key)
-	if val != "" {
-		return val
-	}
-	return fallback
+// GetClusterTopic retrieves the topic name for a given cluster
+func GetClusterTopic(cluster string) string {
+	return fmt.Sprintf("jobs-%s", cluster)
 }

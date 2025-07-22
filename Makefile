@@ -1,49 +1,42 @@
-DOCKER_COMPOSE_FILE := docker-compose.yaml
+# Makefile for distributed cron system
+KAFKA_CONTAINER := kron-kafka
+TOPICS := jobs-cluster-a jobs-cluster-b
+# optional args
+PARTITIONS ?= 2
+REPLICATION ?= 1
 
-.PHONY: build start stop clean help compile
+.PHONY: build up up-kafka down clean compile setup-topics help
 
-build: # bootstrap the application containers
-	docker compose -f $(DOCKER_COMPOSE_FILE) build
+build: # Build Docker images for producer and consumer
+	docker compose build
 
-start: # start the application instances
-	docker compose -f $(DOCKER_COMPOSE_FILE) up
+start: # Start all services (producer, consumers, Kafka)
+	docker compose up
 
-start-kafka: # start the kafka instance
-	docker compose -f $(DOCKER_COMPOSE_FILE) up kafka -d
+start-kafka: # Start Kafka service only
+	docker compose up kafka -d
 
-stop: # stop all instances of the application
-	docker compose -f $(DOCKER_COMPOSE_FILE) stop
+stop: # Stop all services
+	docker compose down
 
+clean: # Remove unused Docker images
+	docker image prune --filter dangling=true
 
-clean: # remove unused docker images
-	docker image prune --filter dangling=true -y
+compile: # Compile producer and consumer binaries to bin/
+	go build -o bin/producer cmd/producer/main.go
+	go build -o bin/consumer cmd/consumer/main.go
 
-compile: # build all consumer and producer instances into 'bin' directory
-	@echo "Building all application instances"
-	go build -o ./bin/producer ./cmd/producer/main.go
-	go build -o ./bin/consumer ./cmd/consumer/main.go
+setup-topics: # Create Kafka topics for clusters (jobs-cluster-a, jobs-cluster-b)
+	@for topic in $(TOPICS); do \
+		docker exec $(KAFKA_CONTAINER) kafka-topics.sh \
+			--create \
+			--if-not-exists \
+			--bootstrap-server localhost:9092 \
+			--topic $$  topic \
+			--partitions $(PARTITIONS) \
+			--replication-factor $(REPLICATION) || exit 1; \
+	done
 
-
-topic ?= jobs
-partitions ?= 2
-replication ?= 1
-
-create-topic: # create a new kafka topic with the specified name and partition. <create-topic topic=jobs partitions=2 replication=1>
-	docker exec kron-kafka kafka-topics.sh \
-	--create \
-	--if-not-exists \
-	--bootstrap-server localhost:9092 \
-	--replication-factor $(replication) \
-	--partitions $(partitions) \
-	--topic $(topic)
-
-modify-topic: # modify existing topic by increasing partitions
-	docker exec kron-kafka kafka-topics.sh \
-	--alter \
-	--bootstrap-server localhost:9092 \
-	--topic $(topic) \
-	--partitions $(partitions)
-	
-
-help: # Show help for each of the Makefile recipes.
-	@grep -E '^[a-zA-Z0-9 -]+:.*#'  Makefile | sort | while read -r l; do printf "\033[1;32m$$(echo $$l | cut -f 1 -d':')\033[00m:$$(echo $$l | cut -f 2- -d'#')\n"; done
+help: # Display available commands
+	@echo "Available commands:"
+	@grep -E '^[a-zA-Z_-]+:.*#' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*#"}; {printf "  \033[36m%-15s\033[0m %s\n",   $$1, $$2}'

@@ -8,7 +8,7 @@ import (
 )
 
 func main() {
-	producer, err := core.NewKronProducer(&core.ProducerConfig{Topic: "jobs"})
+	producer, err := core.NewKronProducer(&core.ProducerConfig{})
 	if err != nil {
 		log.Fatal(err)
 	}

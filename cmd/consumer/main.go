@@ -8,17 +8,17 @@ import (
 	"github.com/mrshabel/kron/core"
 )
 
-var (
-	topics        = []string{"jobs"}
+const (
 	consumerGroup = "kron-consumer"
 )
 
 func main() {
+	cluster := core.GetEnvOrPanic("CLUSTER")
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
 	}))
 
-	consumer, err := core.NewKronConsumer(&core.ConsumerConfig{Topics: topics, GroupID: consumerGroup, Logger: logger})
+	consumer, err := core.NewKronConsumer(&core.ConsumerConfig{Topic: core.GetClusterTopic(cluster), GroupID: consumerGroup, Logger: logger})
 	if err != nil {
 		logger.Error("Failed to start consumer", "error", err)
 		os.Exit(1)

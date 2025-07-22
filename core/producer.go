@@ -34,7 +34,6 @@ var (
 // scan crontab for active jobs, send to kafka
 
 type ProducerConfig struct {
-	Topic                 string
 	CrontabPath           string
 	CronPollInterval      time.Duration
 	BrokerDeliveryTimeout time.Duration
@@ -42,9 +41,6 @@ type ProducerConfig struct {
 }
 
 func (cfg *ProducerConfig) validate() error {
-	if cfg.Topic == "" {
-		return fmt.Errorf("topic is required")
-	}
 	if cfg.CrontabPath == "" {
 		cfg.CrontabPath = DefaultCrontabPath
 	}
@@ -91,7 +87,6 @@ func NewKronProducer(cfg *ProducerConfig) (*Producer, error) {
 
 	producer := &Producer{
 		producer:      p,
-		Topic:         cfg.Topic,
 		deliveryChan:  make(chan kafka.Event, 1000),
 		logger:        cfg.logger,
 		scheduledJobs: make(map[string]time.Time),
@@ -128,6 +123,13 @@ func (p *Producer) GetReadyJobs() ([]*Job, error) {
 			continue
 		}
 		expression, command := strings.Join(content[:5], " "), content[5]
+		// get cluster
+		var cluster string
+		if len(content) > 6 {
+			cluster = content[6]
+		} else {
+			cluster = "cluster-a"
+		}
 
 		schedule, err := p.cronParser.Parse(expression)
 		if err != nil {
@@ -145,7 +147,7 @@ func (p *Producer) GetReadyJobs() ([]*Job, error) {
 			}
 
 			// schedule job
-			jobs = append(jobs, &Job{Command: command, ScheduledAt: scheduledAt})
+			jobs = append(jobs, &Job{Command: command, ScheduledAt: scheduledAt, Cluster: cluster})
 			p.scheduleJob(jobKey, scheduledAt)
 		}
 
@@ -168,10 +170,12 @@ func (p *Producer) DispatchJob(job *Job) error {
 		return fmt.Errorf("failed to marshal job payload: %w", err)
 	}
 
+	topic := GetClusterTopic(job.Cluster)
+	p.logger.Info("job topic", "topic", topic)
 	msg := &kafka.Message{
 		Key:            []byte(jobID),
 		Value:          payload,
-		TopicPartition: kafka.TopicPartition{Topic: &p.Topic, Partition: kafka.PartitionAny},
+		TopicPartition: kafka.TopicPartition{Topic: &topic, Partition: kafka.PartitionAny},
 	}
 
 	if err := p.producer.Produce(msg, p.deliveryChan); err != nil {
@@ -187,7 +191,7 @@ func (p *Producer) DispatchJob(job *Job) error {
 		if res.TopicPartition.Error != nil {
 			return fmt.Errorf("failed to schedule job: %w", res.TopicPartition.Error)
 		}
-		p.logger.Info("job dispatched", "jobId", jobID, "scheduledAt", job.ScheduledAt, "partition", res.TopicPartition.Partition, "offset", res.TopicPartition.Offset)
+		p.logger.Info("job dispatched", "jobId", jobID, "scheduledAt", job.ScheduledAt, "topic", res.TopicPartition.Topic, "partition", res.TopicPartition.Partition)
 	}
 
 	return nil

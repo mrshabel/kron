@@ -19,19 +19,37 @@ services:
         networks:
             - kron
 
-    consumer:
+    consumer-cluster-a:
         build:
             context: .
             dockerfile: ./docker/Dockerfile.consumer
-        # container_name: kron-consumer
+        deploy:
+            replicas: 1
         depends_on:
             kafka:
                 condition: service_healthy
-        # two instances
-        scale: 2
         environment:
             # comma-separated kafka server addresses
             - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+            # cluster
+            - CLUSTER=cluster-a
+        networks:
+            - kron
+
+    consumer-cluster-b:
+        build:
+            context: .
+            dockerfile: ./docker/Dockerfile.consumer
+        deploy:
+            replicas: 1
+        depends_on:
+            kafka:
+                condition: service_healthy
+        environment:
+            # comma-separated kafka server addresses
+            - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+            # cluster
+            - CLUSTER=cluster-b
         networks:
             - kron
 
