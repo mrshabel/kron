@@ -14,18 +14,29 @@ RUN go mod download
 
 COPY . .
 
-# build app
-RUN go build -tags musl -ldflags '-extldflags "-static"' -o main cmd/producer/main.go
+# build all binaries (producer and consumer)
+RUN go build -tags musl -ldflags '-extldflags "-static"' -o producer cmd/producer/main.go
+RUN go build -tags musl -ldflags '-extldflags "-static"' -o consumer cmd/consumer/main.go
 
 
-# run binary in minimal docker image
-# FROM scratch
-FROM alpine
+# producer image
+FROM alpine AS producer
 
 WORKDIR /app
 
 # copy binary from builder stage
-COPY --from=builder /app/main /app/main
+COPY --from=builder /app/producer /app/main
 COPY --from=builder /app/tabs /app/tabs
+
+CMD ["./main"]
+
+
+# consumer image
+FROM alpine AS consumer
+
+WORKDIR /app
+
+# copy binary from builder stage
+COPY --from=builder /app/consumer /app/main
 
 CMD ["./main"]

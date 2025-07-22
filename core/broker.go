@@ -49,3 +49,13 @@ func NewConsumer(topic string, groupID string) (*kafka.Consumer, error) {
 func GetClusterTopic(cluster string) string {
 	return fmt.Sprintf("jobs-%s", cluster)
 }
+
+// GetClusterRetryTopic retrieves the retry topic name for a given cluster
+func GetClusterRetryTopic(cluster string) string {
+	return fmt.Sprintf("jobs-retry-%s", cluster)
+}
+
+// GetClusterDLQ retrieves the dead-letter queue topic for a given cluster
+func GetClusterDLQ(cluster string) string {
+	return fmt.Sprintf("jobs-dlq-%s", cluster)
+}

@@ -27,3 +27,6 @@ make start
 Some technical decisions made in the development of Kron
 
 -   Producer reads the contents of the crontab every minute for updates since the lowest time unit in the cron entry is a minute.
+-   Failed jobs are sent to a retry queue for the given cluster to avoid starving awaiting jobs in the main queue. One the job has exceeded its maximum retries, it is move to the dead-letter queue for critical monitoring
+-   The default cron expression standard is violated as the cluster and maximum retries need to be specified. A line in our crontab will typically look like: `* * * * * echo "hey shabel" cluster-a 3`.
+-

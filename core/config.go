@@ -3,6 +3,7 @@ package core
 import (
 	"fmt"
 	"os"
+	"strconv"
 )
 
 type Config struct {
@@ -22,6 +23,19 @@ func GetEnv(key string, fallback string) string {
 		return val
 	}
 	return fallback
+}
+
+func GetEnvBool(key string, fallback bool) bool {
+	val := os.Getenv(key)
+	if val == "" {
+		return fallback
+	}
+
+	v, err := strconv.ParseBool(val)
+	if err != nil {
+		return fallback
+	}
+	return v
 }
 
 func GetEnvOrPanic(key string) string {

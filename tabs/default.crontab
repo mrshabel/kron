@@ -1,14 +1,19 @@
+## FORMAT: cron-expression command cluster maxRetries
+
 # Log a status message every minute for testing
-* * * * * echo "[$(date)] Kron is active" >> /var/log/kron.log cluster-a
+* * * * * echo "[$(date)] Kron is active" >> /var/log/kron.log cluster-a 1
 
 # Log current time every 2 minutes
-*/2 * * * * echo "[$(date)] Current time: $(date +%H:%M:%S)" >> /var/log/kron.log cluster-b
+*/2 * * * * echo "[$(date)] Current time: $(date +%H:%M:%S)" >> /var/log/kron.log cluster-b 1
 
 # Log disk usage of root every 5 minutes
-*/5 * * * * echo "[$(date)] Disk usage: $(df -h / | tail -1 | awk '{print $5 \" used\"}')" >> /var/log/kron.log cluster-a
+*/5 * * * * echo "[$(date)] Disk usage: $(df -h / | tail -1 | awk '{print $5 \" used\"}')" >> /var/log/kron.log cluster-a 1
 
 # Log memory usage every 10 minutes
-*/10 * * * * echo "[$(date)] Memory: $(free -h | grep '^Mem:' | awk '{print $3 \"/\" $2}')" >> /var/log/kron.log cluster-b
+*/10 * * * * echo "[$(date)] Memory: $(free -h | grep '^Mem:' | awk '{print $3 \"/\" $2}')" >> /var/log/kron.log cluster-b 1
 
 # Log file count in /tmp daily at midnight
-0 0 * * * echo "[$(date)] Files in /tmp: $(ls -1 /tmp | wc -l)" >> /var/log/kron.log cluster-a
+0 0 * * * echo "[$(date)] Files in /tmp: $(ls -1 /tmp | wc -l)" >> /var/log/kron.log cluster-a 1
+
+# Attempt a failed job every minute (sleeps for 2 minutes)
+* * * * * sleep cluster-a 3

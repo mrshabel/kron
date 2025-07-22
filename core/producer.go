@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -122,13 +123,15 @@ func (p *Producer) GetReadyJobs() ([]*Job, error) {
 			p.logger.Warn("invalid crontab entry", "line", lineNumber, "content", line)
 			continue
 		}
-		expression, command := strings.Join(content[:5], " "), content[5]
-		// get cluster
-		var cluster string
-		if len(content) > 6 {
-			cluster = content[6]
-		} else {
-			cluster = "cluster-a"
+		expression := strings.Join(content[:5], " ")
+		// rest: command..., cluster, maximum retries
+		rest := strings.Split(content[5], " ")
+		cluster := rest[len(rest)-2]
+		command := strings.Join(rest, " ")
+		maxRetries, err := strconv.ParseInt(rest[len(rest)-1], 10, 64)
+		if err != nil {
+			// fallback to 1
+			maxRetries = 1
 		}
 
 		schedule, err := p.cronParser.Parse(expression)
@@ -147,7 +150,7 @@ func (p *Producer) GetReadyJobs() ([]*Job, error) {
 			}
 
 			// schedule job
-			jobs = append(jobs, &Job{Command: command, ScheduledAt: scheduledAt, Cluster: cluster})
+			jobs = append(jobs, &Job{Command: command, ScheduledAt: scheduledAt, Cluster: cluster, MaxRetries: int(maxRetries)})
 			p.scheduleJob(jobKey, scheduledAt)
 		}
 
@@ -171,7 +174,6 @@ func (p *Producer) DispatchJob(job *Job) error {
 	}
 
 	topic := GetClusterTopic(job.Cluster)
-	p.logger.Info("job topic", "topic", topic)
 	msg := &kafka.Message{
 		Key:            []byte(jobID),
 		Value:          payload,

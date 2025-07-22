@@ -17,7 +17,9 @@ type Job struct {
 	// metadata
 	Meta any `json:"meta"`
 	// cluster for running job
-	Cluster string `json:"cluster"`
+	Cluster    string `json:"cluster"`
+	Retries    int    `json:"retries"`
+	MaxRetries int    `json:"maxRetries"`
 }
 
 // NewJob creates a new scheduled job to run

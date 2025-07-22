@@ -1,6 +1,7 @@
 # Makefile for distributed cron system
 KAFKA_CONTAINER := kron-kafka
-TOPICS := jobs-cluster-a jobs-cluster-b
+# default topics with retry and dlq
+TOPICS := jobs-cluster-a jobs-cluster-b jobs-retry-cluster-a jobs-retry-cluster-b jobs-dlq-cluster-a jobs-dlq-cluster-b
 # optional args
 PARTITIONS ?= 2
 REPLICATION ?= 1

@@ -25,6 +25,7 @@ type ConsumerConfig struct {
 	BrokerPollIntervalMs    int
 	ConsumerShutdownTimeout time.Duration
 	JobTimeout              time.Duration
+	BrokerDeliveryTimeout   time.Duration
 }
 
 func (cfg *ConsumerConfig) validate() error {
@@ -45,6 +46,9 @@ func (cfg *ConsumerConfig) validate() error {
 	if cfg.JobTimeout <= 0 {
 		cfg.JobTimeout = DefaultJobTimeout
 	}
+	if cfg.BrokerDeliveryTimeout <= 0 {
+		cfg.BrokerDeliveryTimeout = DefaultBrokerDeliveryTimeout
+	}
 
 	// add logger if not passed
 	if cfg.Logger == nil {
@@ -62,7 +66,10 @@ type Consumer struct {
 	Topic    string
 	GroupID  string
 	consumer *kafka.Consumer
-	logger   *slog.Logger
+	// producer instance for retries
+	producer             *kafka.Producer
+	producerDeliveryChan chan kafka.Event
+	logger               *slog.Logger
 }
 
 // NewKronConsumer creates a new instance of a kafka consumer for kron. The caller should call the [Shutdown] method when done
@@ -81,14 +88,20 @@ func NewKronConsumer(cfg *ConsumerConfig) (*Consumer, error) {
 	if err = consumer.Subscribe(cfg.Topic, nil); err != nil {
 		return nil, err
 	}
+	producer, err := NewProducer()
+	if err != nil {
+		return nil, err
+	}
 
 	return &Consumer{
-		consumer: consumer,
-		config:   cfg,
-		Cluster:  config.Cluster,
-		Topic:    cfg.Topic,
-		GroupID:  cfg.GroupID,
-		logger:   cfg.Logger,
+		consumer:             consumer,
+		producer:             producer,
+		producerDeliveryChan: make(chan kafka.Event, 1000),
+		config:               cfg,
+		Cluster:              config.Cluster,
+		Topic:                cfg.Topic,
+		GroupID:              cfg.GroupID,
+		logger:               cfg.Logger,
 	}, nil
 }
 
@@ -109,10 +122,12 @@ func (c *Consumer) Start(ctx context.Context) error {
 			// process on callback
 			if err := c.RunJob(&job); err != nil {
 				c.logger.Error("failed to process consumed job", "jobId", job.ID, "command", job.Command, "error", err)
-				// TODO: retry job with backoff then push to retry topic
-				continue
+				if err := c.Retry(&job); err != nil {
+					c.logger.Error("Fatal: Failed to add job to retry queue", "jobId", job.ID, "topic", e.TopicPartition.Topic, "partition", e.TopicPartition.Partition, "error", err)
+				}
+			} else {
+				c.logger.Info("Job execution complete", "jobId", job.ID, "scheduledAt", job.ScheduledAt, "completedAt", time.Now().String())
 			}
-			c.logger.Info("Job execution complete", "jobId", job.ID, "scheduledAt", job.ScheduledAt, "completedAt", time.Now().String())
 
 			// commit
 			if _, err := c.consumer.CommitMessage(e); err != nil {
@@ -148,7 +163,84 @@ func (c *Consumer) RunJob(job *Job) error {
 	return nil
 }
 
+// Retry adds the given job to the retry topic
+func (c *Consumer) Retry(job *Job) error {
+	job.Retries++
+	// add to dead letter queue
+	if job.Retries >= job.MaxRetries {
+		c.logger.Error("Max retries exceeded. Sending to dead-letter queue", "jobId", job.ID, "command", job.Command)
+		return c.AddToDLQ(job)
+	}
+
+	return c.AddToRetry(job)
+}
+
+// AddToRetry adds the given job to the retry topic
+func (c *Consumer) AddToRetry(job *Job) error {
+	payload, err := json.Marshal(job)
+	if err != nil {
+		return fmt.Errorf("failed to marshal job payload: %w", err)
+	}
+	topic := GetClusterRetryTopic(c.Cluster)
+	msg := &kafka.Message{
+		Key:            []byte(job.ID),
+		Value:          payload,
+		TopicPartition: kafka.TopicPartition{Topic: &topic, Partition: kafka.PartitionAny},
+	}
+
+	if err := c.producer.Produce(msg, c.producerDeliveryChan); err != nil {
+		return err
+	}
+
+	// wait for delivery report
+	select {
+	case <-time.After(c.config.BrokerDeliveryTimeout):
+		return ErrBrokerDeliveryTimeout
+	case e := <-c.producerDeliveryChan:
+		res := e.(*kafka.Message)
+		if res.TopicPartition.Error != nil {
+			return res.TopicPartition.Error
+		}
+		c.logger.Info("job added to retry queue", "jobId", job.ID, "topic", res.TopicPartition.Topic, "partition", res.TopicPartition.Partition)
+	}
+
+	return nil
+}
+
+// AddToDLQ adds the given job to the dead-letter queue
+func (c *Consumer) AddToDLQ(job *Job) error {
+	payload, err := json.Marshal(job)
+	if err != nil {
+		return fmt.Errorf("failed to marshal job payload: %w", err)
+	}
+	topic := GetClusterDLQ(c.Cluster)
+	msg := &kafka.Message{
+		Key:            []byte(job.ID),
+		Value:          payload,
+		TopicPartition: kafka.TopicPartition{Topic: &topic, Partition: kafka.PartitionAny},
+	}
+
+	if err := c.producer.Produce(msg, c.producerDeliveryChan); err != nil {
+		return err
+	}
+
+	// wait for delivery report
+	select {
+	case <-time.After(c.config.BrokerDeliveryTimeout):
+		return ErrBrokerDeliveryTimeout
+	case e := <-c.producerDeliveryChan:
+		res := e.(*kafka.Message)
+		if res.TopicPartition.Error != nil {
+			return res.TopicPartition.Error
+		}
+		c.logger.Info("job added to dead letter queue", "jobId", job.ID, "topic", res.TopicPartition.Topic, "partition", res.TopicPartition.Partition)
+	}
+
+	return nil
+}
+
 // Shutdown closes the running instance of the kafka consumer
 func (c *Consumer) Shutdown() error {
+	c.producer.Close()
 	return c.consumer.Close()
 }

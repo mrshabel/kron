@@ -9,16 +9,33 @@ import (
 )
 
 const (
-	consumerGroup = "kron-consumer"
+	defaultConsumerGroup = "kron-consumer"
+	retryConsumerGroup   = "kron-retry-consumer"
+	dlqConsumerGroup     = "kron-dlq-consumer"
 )
 
 func main() {
-	cluster := core.GetEnvOrPanic("CLUSTER")
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
 	}))
 
-	consumer, err := core.NewKronConsumer(&core.ConsumerConfig{Topic: core.GetClusterTopic(cluster), GroupID: consumerGroup, Logger: logger})
+	// compose topic and consumer group
+	cluster := core.GetEnvOrPanic("CLUSTER")
+	isRetryConsumer := core.GetEnvBool("RETRY", false)
+	isDLQConsumer := core.GetEnvBool("DLQ", false)
+	topic := core.GetClusterTopic(cluster)
+	consumerGroup := defaultConsumerGroup
+
+	if isRetryConsumer {
+		topic = core.GetClusterRetryTopic(cluster)
+		consumerGroup = retryConsumerGroup
+	}
+	if isDLQConsumer {
+		topic = core.GetClusterDLQ(cluster)
+		consumerGroup = dlqConsumerGroup
+	}
+
+	consumer, err := core.NewKronConsumer(&core.ConsumerConfig{Topic: topic, GroupID: consumerGroup, Logger: logger})
 	if err != nil {
 		logger.Error("Failed to start consumer", "error", err)
 		os.Exit(1)

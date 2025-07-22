@@ -6,7 +6,8 @@ services:
     producer:
         build:
             context: .
-            dockerfile: ./docker/Dockerfile.producer
+            dockerfile: ./docker/Dockerfile
+            target: producer
         container_name: kron-producer
         depends_on:
             kafka:
@@ -22,7 +23,8 @@ services:
     consumer-cluster-a:
         build:
             context: .
-            dockerfile: ./docker/Dockerfile.consumer
+            dockerfile: ./docker/Dockerfile
+            target: consumer
         deploy:
             replicas: 1
         depends_on:
@@ -39,7 +41,8 @@ services:
     consumer-cluster-b:
         build:
             context: .
-            dockerfile: ./docker/Dockerfile.consumer
+            dockerfile: ./docker/Dockerfile
+            target: consumer
         deploy:
             replicas: 1
         depends_on:
@@ -52,6 +55,60 @@ services:
             - CLUSTER=cluster-b
         networks:
             - kron
+
+    # retry queue consumer
+    consumer-retry-cluster-a:
+        build:
+            context: .
+            dockerfile: ./docker/Dockerfile
+            target: consumer
+        deploy:
+            replicas: 1
+        depends_on:
+            kafka:
+                condition: service_healthy
+        environment:
+            # comma-separated kafka server addresses
+            - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+            # cluster
+            - CLUSTER=cluster-a
+            # flag indicating that consumer is a retry consumer
+            - RETRY=true
+        networks:
+            - kron
+
+    consumer-dlq-cluster-a:
+        build:
+            context: .
+            dockerfile: ./docker/Dockerfile
+            target: consumer
+        container_name: kron-dlq-consumer
+        depends_on:
+            kafka:
+                condition: service_healthy
+        environment:
+            # comma-separated kafka server addresses
+            - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+            # cluster
+            - CLUSTER=cluster-a
+            # flag indicating that consumer is a dlq consumer
+            - DLQ=true
+        networks:
+            - kron
+
+    prometheus:
+        container_name: kron-prometheus
+        image: prom/prometheus
+        # volumes:
+        # - ./prometheus.yml:/etc/prometheus/prometheus.yml
+        # - ./alert_rules.yml:/etc/prometheus/alert_rules.yml
+        # - prometheus_data:/prometheus
+        # command:
+        # - '--config.file=/etc/prometheus/prometheus.yml'
+        # links:
+        # - alertmanager:alertmanager
+        ports:
+            - 9090:9090
 
     kafka:
         image: bitnami/kafka
